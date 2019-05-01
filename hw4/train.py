@@ -33,8 +33,6 @@ class LanguageModelDataLoader(DataLoader):
 
         # flatten
         data = np.concatenate(data,axis=0)
-        
-        # data = data[:128*batch_size+1]
 
         # drop last
         rows = data.shape[0]//batch_size
@@ -42,10 +40,10 @@ class LanguageModelDataLoader(DataLoader):
 
         # reshape
         self.data = torch.from_numpy(data[:-1]).type(torch.LongTensor)
-        self.data = self.data.reshape(rows, batch_size)
+        self.data = self.data.reshape(batch_size, rows).permute(1,0)
 
         self.labels = torch.from_numpy(data[1:]).type(torch.LongTensor)
-        self.labels = self.labels.reshape(rows, batch_size)
+        self.labels = self.labels.reshape(batch_size, rows).permute(1,0)
 
     def __iter__(self):
         # concatenate your articles and build into batches
@@ -87,7 +85,7 @@ class TestLanguageModel:
         input = torch.from_numpy(inp.T).type(torch.LongTensor).to(DEVICE)
         output, hidden = model(input)
         output = output.detach().cpu().numpy()
-        return output[-1, :, :]
+        return output[-1]
         
     def generation(inp, forward, model):
         """
@@ -103,8 +101,7 @@ class TestLanguageModel:
         hidden = None
         for i in range(forward):
             output, hidden = model(input, hidden)
-            output = output[-1]
-            maxv, maxi = output.max(1)
+            maxv, maxi = output[-1].max(1)
             results[i] = maxi
             input = torch.cat((input, maxi.unsqueeze(0)), dim=0)
 
@@ -134,7 +131,7 @@ class LanguageModelTrainer:
         self.run_id = run_id
         
         # TODO: Define your optimizer and criterion here
-        self.optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         self.criterion = nn.CrossEntropyLoss().to(DEVICE)
 
     def train(self):
@@ -215,7 +212,7 @@ class LanguageModelTrainer:
 
 
 NUM_EPOCHS = 15
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 
 run_id = str(int(time.time()))
 if not os.path.exists('./experiments'):
