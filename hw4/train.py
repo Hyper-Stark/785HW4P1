@@ -34,6 +34,8 @@ class LanguageModelDataLoader(DataLoader):
         # flatten
         data = np.concatenate(data,axis=0)
         
+        # data = data[:128*batch_size+1]
+
         # drop last
         rows = data.shape[0]//batch_size
         data = data[:rows*batch_size+1]
@@ -97,16 +99,16 @@ class TestLanguageModel:
             :return: generated words (batch size, forward)
         """        
         input = torch.from_numpy(inp.T).type(torch.LongTensor).to(DEVICE)
-        output = torch.zeros((forward, input.shape[1]), dtype=torch.long)
+        results = torch.zeros((forward, input.shape[1]), dtype=torch.long)
         hidden = None
         for i in range(forward):
             output, hidden = model(input, hidden)
-            output = output[-1,:,:]
+            output = output[-1]
             maxv, maxi = output.max(1)
-            output[i] = maxi
-            input = torch.cat((input, output.unsqueeze(0)), dim=0)
+            results[i] = maxi
+            input = torch.cat((input, maxi.unsqueeze(0)), dim=0)
 
-        return output.permute(1,0)
+        return results.permute(1,0)
 
 
 # TODO: define other hyperparameters here
