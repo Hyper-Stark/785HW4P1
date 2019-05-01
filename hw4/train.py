@@ -3,12 +3,11 @@ from matplotlib import pyplot as plt
 import time
 import os
 import torch
+import random
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 from tests import test_prediction, test_generation
-
-import random
 
 dataset = np.load('../dataset/wiki.train.npy')
 fixtures_pred = np.load('../fixtures/prediction.npz')  # dev
@@ -16,10 +15,7 @@ fixtures_gen = np.load('../fixtures/generation.npy')  # dev
 fixtures_pred_test = np.load('../fixtures/prediction_test.npz')  # test
 fixtures_gen_test = np.load('../fixtures/generation_test.npy')  # test
 vocab = np.load('../dataset/vocab.npy')
-
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-# data loader
 
 class LanguageModelDataLoader(DataLoader):
     """
@@ -27,6 +23,7 @@ class LanguageModelDataLoader(DataLoader):
     """
     def __init__(self, dataset, batch_size, shuffle=True):
 
+        # shuffle        
         data = dataset
         if shuffle:
             random.shuffle(data)
@@ -47,15 +44,15 @@ class LanguageModelDataLoader(DataLoader):
 
     def __iter__(self):
         # concatenate your articles and build into batches
-        i, lens = 0, random.randint(64,128)
+        i, lens = 0, random.randint(32,64)
 
         while i + lens < self.data.shape[0]:
             data = self.data[i:i+lens]
             labels = self.labels[i:i+lens]
             yield(data, labels)
-            i, lens = i+lens, random.randint(64,128)
+            i, lens = i+lens, random.randint(32,64)
 
-# model
+
 
 class LanguageModel(nn.Module):
     """
@@ -67,12 +64,16 @@ class LanguageModel(nn.Module):
         self.lstm = nn.LSTM(256, 256, 3)
         self.linear = nn.Linear(256, vocab_size)
 
+
     def forward(self, x, hidden=None):
         # Feel free to add extra arguments to forward (like an argument to pass in the hiddens)
         embedding = self.embedding(x)
         output, hidden = self.lstm(embedding,hidden)
         output = self.linear(output)
         return output, hidden
+
+
+# model trainer
 
 class TestLanguageModel:
     def prediction(inp, model):
@@ -108,8 +109,6 @@ class TestLanguageModel:
         return results.permute(1,0)
 
 
-# TODO: define other hyperparameters here
-
 class LanguageModelTrainer:
     def __init__(self, model, loader, max_epochs=1, run_id='exp'):
         """
@@ -131,7 +130,7 @@ class LanguageModelTrainer:
         self.run_id = run_id
         
         # TODO: Define your optimizer and criterion here
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
         self.criterion = nn.CrossEntropyLoss().to(DEVICE)
 
     def train(self):
@@ -156,18 +155,17 @@ class LanguageModelTrainer:
         inputs = inputs.to(DEVICE)
 
         #calculate
-        outputs, hidden = self.model(inputs)
+        outputs, hidden = self.model(inputs) 
 
         #calculate loss
         targets = targets.reshape(targets.numel()).to(DEVICE)
-        outputs = outputs.reshape(outputs.shape[2],-1).permute(1,0)
-        loss = self.criterion(outputs, targets)
+        outputs = outputs.reshape(-1, outputs.shape[2])
 
         #step
+        loss = self.criterion(outputs, targets)
         loss.backward()
         self.optimizer.step()
         return loss
-
     
     def test(self):
         # don't change these
@@ -209,10 +207,10 @@ class LanguageModelTrainer:
             fw.write(self.generated_test[-1])
 
 
+# TODO: define other hyperparameters here
 
-
-NUM_EPOCHS = 15
-BATCH_SIZE = 64
+NUM_EPOCHS = 12
+BATCH_SIZE = 32
 
 run_id = str(int(time.time()))
 if not os.path.exists('./experiments'):
@@ -232,7 +230,7 @@ for epoch in range(NUM_EPOCHS):
         best_nll = nll
         print("Saving model, predictions and generated output for epoch "+str(epoch)+" with NLL: "+ str(best_nll))
         trainer.save()
-
+    
 # Don't change these
 # plot training curves
 plt.figure()
