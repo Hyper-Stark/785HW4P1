@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import time
 import os
 import torch
+import random
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
@@ -20,14 +21,30 @@ class LanguageModelDataLoader(DataLoader):
         TODO: Define data loader logic here
     """
     def __init__(self, dataset, batch_size, shuffle=True):
-        
-        raise NotImplemented
+        random.shuffle(dataset)
+        dataset = np.concatenate(dataset, axis=0)
+        self.data_size = len(dataset)
+        n = (self.data_size // batch_size) * batch_size
+        self.row_len = n // batch_size
+        dataset = dataset[:n+1]
+        self.data = torch.from_numpy(dataset[:-1]).long()
+        self.labels = torch.from_numpy(dataset[1:]).long()
+        self.batch_size = batch_size
 
 
     def __iter__(self):
         # concatenate your articles and build into batches
-        
-        raise NotImplemented
+        x = self.data.reshape((self.batch_size, self.row_len)).permute(1, 0)
+        y = self.labels.reshape((self.batch_size, self.row_len)).permute(1, 0)
+        seq_len = random.randint(50, 100)
+        i = 0
+
+        while i + seq_len < self.row_len:
+            x_batch = x[i:i + seq_len]
+            y_batch = y[i:i + seq_len]
+            yield(x_batch, y_batch)
+            seq_len = random.randint(50, 100)
+            i = i + seq_len
 
 # model
 
@@ -37,13 +54,17 @@ class LanguageModel(nn.Module):
     """
     def __init__(self, vocab_size):
         super(LanguageModel, self).__init__()
-        
-        raise NotImplemented
+        self.embedding = nn.Embedding(vocab_size, 256)
+        self.lstm = nn.LSTM(256, 256, 3)
+        self.mlp = nn.Linear(256, vocab_size)
 
 
     def forward(self, x):
         # Feel free to add extra arguments to forward (like an argument to pass in the hiddens)
-        raise NotImplemented
+        output = self.embedding(x)
+        output, hidden = self.lstm(output, hidden)
+        output = self.mlp(output)
+        return output, hidden
 
 # model trainer
 
@@ -55,7 +76,9 @@ class TestLanguageModel:
             :param inp:
             :return: a np.ndarray of logits
         """
-        raise NotImplemented
+        inputs = Variable(torch.from_numpy(inp.T).long()).to(device)
+        output, _ = model(inputs)
+        return output.cpu().detach().numpy()[-1, :, :]
 
         
     def generation(inp, forward, model):
@@ -67,7 +90,17 @@ class TestLanguageModel:
             :param forward: number of additional words to generate
             :return: generated words (batch size, forward)
         """        
-        raise NotImplemented
+        inputs = Variable(torch.from_numpy(inp.T).long()).to(device)
+        outputs = torch.zeros((forward, inputs.size(1)), dtype=torch.int64)
+        hidden = None
+        for i in range(forward):
+            output, hidden = model(inputs, hidden)
+            output = output[-1, :, :]
+            output = torch.argmax(output, dim=1)
+            outputs[i] = output
+            inputs = torch.cat((inputs, output.unsqueeze(0)), dim=0)
+
+        return outputs.permute(1, 0)
 
 class LanguageModelTrainer:
     def __init__(self, model, loader, max_epochs=1, run_id='exp'):
@@ -90,8 +123,8 @@ class LanguageModelTrainer:
         self.run_id = run_id
         
         # TODO: Define your optimizer and criterion here
-        self.optimizer = None
-        self.criterion = None
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=0)
+        self.criterion = nn.CrossEntropyLoss().to(device)
 
     def train(self):
         self.model.train() # set to training mode
@@ -110,7 +143,15 @@ class LanguageModelTrainer:
             TODO: Define code for training a single batch of inputs
         
         """
-        raise NotImplemented
+        self.optimizer.zero_grad()
+        inputs = Variable(inputs).to(device)
+        outputs, _ = self.model(inputs)
+        outputs = outputs.reshape(-1, outputs.size(2))
+        targets = targets.reshape(-1).to(device)
+        loss = self.criterion(outputs, targets)
+        loss.backward()
+        self.optimizer.step()
+        return loss
 
     
     def test(self):
@@ -155,8 +196,8 @@ class LanguageModelTrainer:
 
 # TODO: define other hyperparameters here
 
-NUM_EPOCHS = None
-BATCH_SIZE = None
+NUM_EPOCHS = 15
+BATCH_SIZE = 64
 
 run_id = str(int(time.time()))
 if not os.path.exists('./experiments'):
