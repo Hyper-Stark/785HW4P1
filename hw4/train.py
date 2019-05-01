@@ -67,10 +67,10 @@ class LanguageModel(nn.Module):
         self.lstm = nn.LSTM(256, 256, 3)
         self.linear = nn.Linear(256, vocab_size)
 
-    def forward(self, x):
+    def forward(self, x, hidden=None):
         # Feel free to add extra arguments to forward (like an argument to pass in the hiddens)
         embedding = self.embedding(x)
-        output, hidden = self.lstm(embedding)
+        output, hidden = self.lstm(embedding,hidden)
         output = self.linear(output)
         return output, hidden
 
@@ -97,10 +97,10 @@ class TestLanguageModel:
             :return: generated words (batch size, forward)
         """        
         input = torch.from_numpy(inp.T).type(torch.LongTensor).to(DEVICE)
-        output = torch.zeros((forward, inputs.shape[1]), dtype=torch.long)
+        output = torch.zeros((forward, input.shape[1]), dtype=torch.long)
         hidden = None
         for i in range(forward):
-            output, hidden = model(inputs, hidden)
+            output, hidden = model(input, hidden)
             output = output[-1,:,:]
             maxv, maxi = output.max(1)
             output[i] = maxi
@@ -221,7 +221,7 @@ if not os.path.exists('./experiments'):
 os.mkdir('./experiments/%s' % run_id)
 print("Saving models, predictions, and generated words to ./experiments/%s" % run_id)
 
-model = LanguageModel(len(vocab))
+model = LanguageModel(len(vocab)).to(DEVICE)
 loader = LanguageModelDataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
 trainer = LanguageModelTrainer(model=model, loader=loader, max_epochs=NUM_EPOCHS, run_id=run_id)
 
