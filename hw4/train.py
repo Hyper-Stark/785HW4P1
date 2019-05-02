@@ -61,8 +61,9 @@ class LanguageModel(nn.Module):
         super(LanguageModel, self).__init__()
         self.embedding = nn.Embedding(vocab_size, 256)
         self.lstm1 = nn.LSTM(256, 256, 2)
-        self.dropout = LockedDropout(0.3)
+        self.dropout1 = LockedDropout(0.3)
         self.lstm2 = nn.LSTM(256, 256, 2)
+        self.dropout2 = LockedDropout(0.3)
         self.linear = nn.Linear(256, vocab_size)
 
 
@@ -70,8 +71,9 @@ class LanguageModel(nn.Module):
         # Feel free to add extra arguments to forward (like an argument to pass in the hiddens)
         embedding = self.embedding(x)
         output, hidden = self.lstm1(embedding,hidden)
-        output = self.dropout(output)
+        output = self.dropout1(output)
         output, hidden = self.lstm2(output, hidden)
+        output = self.dropout2(output)
         output = self.linear(output)
         return output, hidden
 
@@ -146,7 +148,7 @@ class LanguageModelTrainer:
         self.run_id = run_id
         
         # TODO: Define your optimizer and criterion here
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         self.criterion = nn.CrossEntropyLoss().to(DEVICE)
 
     def train(self):
