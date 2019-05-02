@@ -30,7 +30,7 @@ class LanguageModelDataLoader(DataLoader):
 
         # flatten
         data = np.concatenate(data,axis=0)
-
+        
         # drop last
         rows = data.shape[0]//batch_size
         data = data[:rows*batch_size+1]
@@ -53,7 +53,6 @@ class LanguageModelDataLoader(DataLoader):
             i, lens = i+lens, random.randint(32,64)
 
 
-
 class LanguageModel(nn.Module):
     """
         TODO: Define your model here
@@ -61,17 +60,34 @@ class LanguageModel(nn.Module):
     def __init__(self, vocab_size):
         super(LanguageModel, self).__init__()
         self.embedding = nn.Embedding(vocab_size, 256)
-        self.lstm = nn.LSTM(256, 256, 3)
+        self.lstm1 = nn.LSTM(256, 256, 2)
+        self.dropout = LockedDropout(0.3)
+        self.lstm2 = nn.LSTM(256, 256, 2)
         self.linear = nn.Linear(256, vocab_size)
 
 
     def forward(self, x, hidden=None):
         # Feel free to add extra arguments to forward (like an argument to pass in the hiddens)
         embedding = self.embedding(x)
-        output, hidden = self.lstm(embedding,hidden)
+        output, hidden = self.lstm1(embedding,hidden)
+        output = self.dropout(output)
+        output, hidden = self.lstm2(output, hidden)
         output = self.linear(output)
         return output, hidden
 
+# source code: https://github.com/salesforce/awd-lstm-lm/blob/master/locked_dropout.py
+class LockedDropout(nn.Module):
+    def __init__(self, dropout=0.5):
+        super().__init__()
+        self.dropout = dropout
+
+    def forward(self, x):
+        if not self.training or not self.dropout:
+            return x
+        m = x.data.new(1, x.size(1), x.size(2)).bernoulli_(1 - self.dropout)
+        mask = Variable(m, requires_grad=False) / (1 - self.dropout)
+        mask = mask.expand_as(x)
+        return mask * x
 
 # model trainer
 
